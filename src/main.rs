@@ -1,44 +1,78 @@
-use std::fmt::Display;
+use std::{fmt::Display, time};
 
 use rand::{RngExt, seq::IndexedRandom};
 
 fn main() {
     println!("Hello, world!");
 
-    let mut sudoku = Sudoku::default();
+    let start = time::Instant::now();
 
-    let mut rng = rand::rng();
+    let mut count = 0;
+    let sudoku = loop {
+        let mut sudoku = Sudoku::default();
 
-    // TODO: backtrack
-    let mut tried = [[Seen::new(); 9]; 9];
-    let mut index = 0;
-    'cells: loop {
-        let row_i = index / 9;
-        let col_i = index % 9;
-        loop {
-            let seen = &mut tried[row_i][col_i];
-            let Some(chosen) = seen.choose_new(&mut rng) else {
-                seen.clear();
-                sudoku.clear_cell(row_i, col_i);
-                index = index.checked_sub(1).unwrap_or_default();
-                continue 'cells;
-            };
-            seen.set(chosen);
-            sudoku.set_cell(row_i, col_i, chosen);
-            if sudoku.check() {
-                break;
+        let mut rng = rand::rng();
+
+        let mut tried = [[Seen::new(); 9]; 9];
+        let mut index = 0;
+        'cells: loop {
+            let row_i = index / 9;
+            let col_i = index % 9;
+            loop {
+                let seen = &mut tried[row_i][col_i];
+                let Some(chosen) = seen.choose_new(&mut rng) else {
+                    seen.clear();
+                    sudoku.clear_cell(row_i, col_i);
+                    index = index.checked_sub(1).unwrap_or_default();
+                    continue 'cells;
+                };
+                seen.set(chosen);
+                sudoku.set_cell(row_i, col_i, chosen);
+                if sudoku.check() {
+                    break;
+                }
+            }
+            index += 1;
+            if index >= 9 * 9 {
+                break 'cells;
             }
         }
-        index += 1;
-        if index >= 9 * 9 {
-            break 'cells;
-        }
-    }
 
+        // println!("{sudoku}");
+
+        let mut tried_rows = Seen::new();
+        let mut tried_cols = [Seen::new(); 9];
+        loop {
+            let Some(row_i_number) = tried_rows.choose_new(&mut rng) else {
+                break;
+            };
+            let row_i = u8::from(row_i_number) as usize - 1;
+            let Some(col_i_number) = tried_cols[row_i].choose_new(&mut rng) else {
+                tried_rows.set(row_i_number);
+                continue;
+            };
+            tried_cols[row_i].set(col_i_number);
+            let col_i = u8::from(col_i_number) as usize - 1;
+            let mut sudoku_clone = sudoku.clone();
+            sudoku_clone.clear_cell(row_i, col_i);
+            count += 1;
+            if sudoku_clone.clone().has_one_solution() {
+                sudoku = sudoku_clone;
+            } else {
+                continue;
+            }
+        }
+        // if dbg!(sudoku.count_non_empty()) < 23 {
+        break sudoku;
+        // }
+    };
+    let duration = time::Instant::now() - start;
     println!("{sudoku}");
+    println!("{duration:?}; {count}: {}", sudoku.count_non_empty());
+    println!("{}", sudoku.to_line());
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Sudoku {
     cells: [[Option<Number>; 9]; 9], // [rows][cols]
 }
@@ -98,6 +132,59 @@ impl Sudoku {
     pub fn clear_cell(&mut self, row_i: usize, col_i: usize) {
         self.cells[row_i][col_i] = None;
     }
+
+    pub fn get_cell(&self, row_i: usize, col_i: usize) -> Option<Number> {
+        self.cells[row_i][col_i]
+    }
+
+    pub fn has_one_solution(mut self) -> bool {
+        let mut empty_indices = Vec::new();
+        for index in 0..9 * 9 {
+            let row_i = index / 9;
+            let col_i = index % 9;
+            if self.get_cell(row_i, col_i).is_none() {
+                empty_indices.push(index);
+            }
+        }
+        let mut tried = [[Seen::new(); 9]; 9];
+        let mut index = 0;
+        let mut solutions = 0;
+        'cells: loop {
+            let Some(cell_i) = empty_indices.get(index) else {
+                solutions += 1;
+                if solutions > 1 {
+                    return false;
+                }
+                index -= 1;
+                continue 'cells;
+            };
+            let row_i = cell_i / 9;
+            let col_i = cell_i % 9;
+            let Some(candidate) = tried[row_i][col_i].get_next() else {
+                if index == 0 {
+                    return solutions == 1;
+                } else {
+                    tried[row_i][col_i].clear();
+                    self.clear_cell(row_i, col_i);
+                    index -= 1;
+                    continue 'cells;
+                }
+            };
+            tried[row_i][col_i].set(candidate);
+            self.set_cell(row_i, col_i, candidate);
+            if self.check() {
+                if index < 9 * 9 {
+                    index += 1;
+                }
+            } else {
+                self.clear_cell(row_i, col_i);
+            }
+        }
+    }
+
+    pub fn count_non_empty(&self) -> usize {
+        self.cells.iter().flatten().filter(|c| c.is_some()).count()
+    }
 }
 
 impl Display for Sudoku {
@@ -117,13 +204,28 @@ impl Display for Sudoku {
                 if let Some(c) = cell {
                     write!(f, " {}", u8::from(*c))?;
                 } else {
-                    write!(f, "-")?;
+                    write!(f, "  ")?;
                 }
             }
             writeln!(f, "│")?;
         }
         writeln!(f, "└────────┴────────┴────────┘")?;
         Ok(())
+    }
+}
+
+impl Sudoku {
+    pub fn to_line(&self) -> String {
+        let mut string = String::with_capacity(9 * 9);
+        for row in self.cells {
+            for cell in row {
+                string.push(
+                    cell.map(|c| char::from_digit(u8::from(c) as u32, 10).unwrap())
+                        .unwrap_or('0'),
+                );
+            }
+        }
+        string
     }
 }
 
@@ -156,6 +258,11 @@ impl Number {
 pub struct Seen(u16);
 
 impl Seen {
+    const ALL_NUMBERS: [Number; 9] = {
+        use Number::*;
+        [N1, N2, N3, N4, N5, N6, N7, N8, N9]
+    };
+
     pub fn new() -> Self {
         Self(0)
     }
@@ -193,12 +300,21 @@ impl Seen {
         use Number::*;
         let mut arr = [N1; 9];
         let mut i = 0;
-        for number in [N1, N2, N3, N4, N5, N6, N7, N8, N9] {
+        for number in Self::ALL_NUMBERS {
             if !self.get(number) {
                 arr[i] = number;
                 i += 1;
             }
         }
         arr[0..i].choose(rng).cloned()
+    }
+
+    pub fn get_next(&self) -> Option<Number> {
+        for n in Self::ALL_NUMBERS {
+            if !self.get(n) {
+                return Some(n);
+            }
+        }
+        None
     }
 }
