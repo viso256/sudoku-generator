@@ -1,4 +1,8 @@
-use std::{fmt::Display, time};
+use std::{
+    fmt::{Debug, Display},
+    io::Read as _,
+    time,
+};
 
 use rand::{RngExt, seq::IndexedRandom};
 
@@ -20,7 +24,7 @@ fn main() {
             'cells: loop {
                 let row_i = index / 9;
                 let col_i = index % 9;
-                loop {
+                'value: loop {
                     let seen = &mut tried[row_i][col_i];
                     let Some(chosen) = seen.choose_new(&mut rng) else {
                         seen.clear();
@@ -29,9 +33,10 @@ fn main() {
                         continue 'cells;
                     };
                     seen.set(chosen);
-                    sudoku.set_cell(row_i, col_i, chosen);
-                    if sudoku.check() {
-                        break;
+                    match sudoku.try_set_cell(row_i, col_i, chosen) {
+                        Ok(()) => break 'value,
+                        Err(SudokuResult::InvalidValue) => continue 'value,
+                        Err(e) => panic!("{:?}", e),
                     }
                 }
                 index += 1;
@@ -68,17 +73,26 @@ fn main() {
             break sudoku;
             // }
         };
-        //println!("{}", sudoku.to_line());
-        //println!("{sudoku}");
-        //println!("{count}: {}", sudoku.count_non_empty());
+        // println!("{}", sudoku.to_line());
+        // println!("{sudoku}");
+        // println!("{count}: {}", sudoku.count_non_empty());
     }
     let duration = time::Instant::now() - start;
     println!("{:?}", duration / repetitions);
 }
 
+#[derive(Debug)]
+pub enum SudokuResult {
+    InvalidValue,
+    InvalidCell,
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct Sudoku {
     cells: [[Option<Number>; 9]; 9], // [rows][cols]
+    rows: [Seen; 9],
+    cols: [Seen; 9],
+    boxes: [Seen; 9],
 }
 
 impl Sudoku {
@@ -128,13 +142,42 @@ impl Sudoku {
         }
         true
     }
-
-    pub fn set_cell(&mut self, row_i: usize, col_i: usize, n: Number) {
+    pub fn try_set_cell(
+        &mut self,
+        row_i: usize,
+        col_i: usize,
+        n: Number,
+    ) -> Result<(), SudokuResult> {
+        if row_i >= 9 || col_i >= 9 {
+            return Err(SudokuResult::InvalidCell);
+        }
+        if self.rows[row_i].get(n)
+            || self.cols[col_i].get(n)
+            || self.boxes[Self::get_box_i(row_i, col_i)].get(n)
+        {
+            return Err(SudokuResult::InvalidValue);
+        }
+        self.clear_cell(row_i, col_i);
+        self.rows[row_i].set(n);
+        self.cols[col_i].set(n);
+        self.boxes[Self::get_box_i(row_i, col_i)].set(n);
         self.cells[row_i][col_i] = Some(n);
+        Ok(())
+    }
+
+    fn get_box_i(row_i: usize, col_i: usize) -> usize {
+        let box_row_i = row_i / 3;
+        let box_col_i = col_i / 3;
+        box_row_i * 3 + box_col_i
     }
 
     pub fn clear_cell(&mut self, row_i: usize, col_i: usize) {
-        self.cells[row_i][col_i] = None;
+        if let Some(n) = self.cells[row_i][col_i] {
+            self.rows[row_i].unset(n);
+            self.cols[col_i].unset(n);
+            self.boxes[Self::get_box_i(row_i, col_i)].unset(n);
+            self.cells[row_i][col_i] = None;
+        }
     }
 
     pub fn get_cell(&self, row_i: usize, col_i: usize) -> Option<Number> {
@@ -176,13 +219,16 @@ impl Sudoku {
                 }
             };
             tried[row_i][col_i].set(candidate);
-            self.set_cell(row_i, col_i, candidate);
-            if self.check() {
-                if index < 9 * 9 {
-                    index += 1;
+            match self.try_set_cell(row_i, col_i, candidate) {
+                Ok(()) => {
+                    if index < 9 * 9 {
+                        index += 1;
+                    }
                 }
-            } else {
-                self.clear_cell(row_i, col_i);
+                Err(SudokuResult::InvalidValue) => {
+                    self.clear_cell(row_i, col_i);
+                }
+                Err(e) => panic!("{:?}", e),
             }
         }
     }
@@ -275,8 +321,16 @@ impl Number {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub struct Seen(u16);
+
+impl Debug for Seen {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("Seen")
+            .field(&format!("{:b}", self.0))
+            .finish()
+    }
+}
 
 impl Seen {
     const ALL_NUMBERS: [Number; 9] = {
@@ -298,6 +352,10 @@ impl Seen {
 
     pub fn set(&mut self, n: Number) {
         self.0 |= n.to_bits();
+    }
+
+    pub fn unset(&mut self, n: Number) {
+        self.0 &= !n.to_bits();
     }
 
     pub fn all_seen(&self) -> bool {
