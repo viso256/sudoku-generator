@@ -1,21 +1,23 @@
 use std::{
     fmt::{Debug, Display},
-    io::Read as _,
+    ops::Deref,
     time,
 };
 
-use rand::{RngExt, seq::IndexedRandom};
+use rand::seq::IndexedRandom;
+use serde::{Deserialize, Serialize};
 
 fn main() {
     println!("Hello, world!");
 
     let start = time::Instant::now();
 
-    let repetitions = 100;
+    let mut sudokus: Vec<Puzzle> = Vec::new();
+    let repetitions = 12;
     for _ in 0..repetitions {
         let mut count = 0;
         let sudoku = loop {
-            let mut sudoku = Sudoku::default();
+            let mut sudoku = SudokuGenerator::default();
 
             let mut rng = rand::rng();
 
@@ -45,6 +47,8 @@ fn main() {
                 }
             }
 
+            let solution: Sudoku = sudoku.clone().try_into().unwrap();
+
             let mut tried_rows = Seen::new();
             let mut tried_cols = [Seen::new(); 9];
             loop {
@@ -68,17 +72,47 @@ fn main() {
                 }
             }
             let count = sudoku.count_non_empty();
-            // println!("{}", count);
-            // if sudoku.count_non_empty() < 20 {
-            break sudoku;
+            println!("{}", count);
+            // if sudoku.count_non_empty() < 22 {
+            break Puzzle {
+                puzzle: sudoku.try_into().unwrap(),
+                solution,
+            };
             // }
         };
         // println!("{}", sudoku.to_line());
         // println!("{sudoku}");
         // println!("{count}: {}", sudoku.count_non_empty());
+        sudokus.push(sudoku);
     }
     let duration = time::Instant::now() - start;
     println!("{:?}", duration / repetitions);
+
+    let writer = std::fs::File::create("out.json").unwrap();
+    serde_json::to_writer_pretty(writer, &sudokus).unwrap();
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Puzzle {
+    puzzle: Sudoku,
+    solution: Sudoku,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Sudoku([[Option<u8>; 9]; 9]);
+
+impl TryFrom<SudokuGenerator> for Sudoku {
+    type Error = SudokuResult;
+
+    fn try_from(value: SudokuGenerator) -> Result<Self, Self::Error> {
+        let mut sudoku = Sudoku([[None; 9]; 9]);
+        for (row_i, row) in value.cells.iter().enumerate() {
+            for (col_i, cell) in row.iter().enumerate() {
+                sudoku.0[row_i][col_i] = cell.map(u8::from);
+            }
+        }
+        Ok(sudoku)
+    }
 }
 
 #[derive(Debug)]
@@ -88,14 +122,14 @@ pub enum SudokuResult {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct Sudoku {
+pub struct SudokuGenerator {
     cells: [[Option<Number>; 9]; 9], // [rows][cols]
     rows: [Seen; 9],
     cols: [Seen; 9],
     boxes: [Seen; 9],
 }
 
-impl Sudoku {
+impl SudokuGenerator {
     pub fn check(&self) -> bool {
         let mut seen = Seen::new();
         for row in self.cells {
@@ -254,7 +288,7 @@ impl Sudoku {
     }
 }
 
-impl Display for Sudoku {
+impl Display for SudokuGenerator {
     // ─ │ ┌ ┐ └ ┘ ├ ┤ ┬ ┴ ┼
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "┌────────┬────────┬────────┐")?;
@@ -281,7 +315,7 @@ impl Display for Sudoku {
     }
 }
 
-impl Sudoku {
+impl SudokuGenerator {
     pub fn to_line(&self) -> String {
         let mut string = String::with_capacity(9 * 9);
         for row in self.cells {
