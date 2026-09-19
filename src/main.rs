@@ -9,6 +9,9 @@ use sudoku::{
     sudoku::{Puzzle, Sudoku},
 };
 
+#[cfg(feature = "generate-pdf")]
+use sudoku::generate_pdf;
+
 fn main() {
     println!("Hello, world!");
 
@@ -24,6 +27,10 @@ fn main() {
     let duration = time::Instant::now() - start;
     println!("{:?}", duration / repetitions);
 
-    let writer = std::fs::File::create("out.json").unwrap();
-    serde_json::to_writer_pretty(writer, &sudokus).unwrap();
+    #[cfg(feature = "generate-pdf")]
+    {
+        let pdf = generate_pdf(2);
+
+        std::fs::write("out.pdf", pdf).unwrap();
+    }
 }

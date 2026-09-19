@@ -1,4 +1,4 @@
-#let sudokus = json("out.json")
+#let sudokus = json("sudoku.json")
 
 #let write_cell_size(n, size) = {
   text(

@@ -1,10 +1,18 @@
-use crate::{bitset::BitSet, error::SudokuError, generator::SudokuGenerator, sudoku::{Puzzle, Sudoku}};
+use crate::{
+    bitset::BitSet,
+    error::SudokuError,
+    generator::SudokuGenerator,
+    sudoku::{Puzzle, Sudoku},
+};
 
 pub mod bitset;
 pub mod error;
 pub mod generator;
 pub mod solver;
 pub mod sudoku;
+
+#[cfg(feature = "generate-pdf")]
+pub mod pdf_generator;
 
 pub fn generate_puzzle() -> Puzzle {
     let mut sudoku = SudokuGenerator::default();
@@ -61,4 +69,29 @@ pub fn generate_puzzle() -> Puzzle {
         }
     }
     Puzzle::new_from(sudoku.into(), solution)
+}
+
+#[cfg(feature = "generate-pdf")]
+pub fn generate_pdf(pages: usize) -> Vec<u8> {
+    use typst::diag::Warned;
+use typst_pdf::PdfOptions;
+
+use crate::pdf_generator::CustomWorld;
+
+    let mut puzzles = Vec::new();
+
+    for _ in 0..pages * 6 {
+        puzzles.push(generate_puzzle());
+    }
+
+    let world =
+        CustomWorld::new(serde_json::to_string(&puzzles).expect("should be able to generate json"));
+    let Warned { output, warnings} = typst::compile(&world);
+    if !warnings.is_empty() {
+        eprintln!("warnings: {:#?}", warnings);
+    }
+    let document = output.expect("failed to generate document");
+
+    let pdf = typst_pdf::pdf(&document, &PdfOptions::default()).expect("failed to generate pdf");
+    pdf
 }
