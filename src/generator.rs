@@ -3,9 +3,39 @@ use crate::{
     error::SudokuError,
 };
 
+pub trait IterCells {
+    type Cell;
+    fn iter_cells(&self) -> impl Iterator<Item = (&Self::Cell, usize, usize)>;
+    fn iter_cells_mut(&mut self) -> impl Iterator<Item = (&mut Self::Cell, usize, usize)>;
+}
+
+impl<T, const M: usize, const N: usize> IterCells for [[T; M]; N] {
+    type Cell = T;
+
+    fn iter_cells(&self) -> impl Iterator<Item = (&Self::Cell, usize, usize)> {
+        self.iter().enumerate().flat_map(|(row_i, row)| {
+            row.iter()
+                .enumerate()
+                .map(move |(col_i, cell)| (cell, col_i, row_i))
+        })
+    }
+
+    fn iter_cells_mut(&mut self) -> impl Iterator<Item = (&mut Self::Cell, usize, usize)> {
+        self.iter_mut().enumerate().flat_map(|(row_i, row)| {
+            row.iter_mut()
+                .enumerate()
+                .map(move |(col_i, cell)| (cell, col_i, row_i))
+        })
+    }
+}
+
+pub type SudokuCell = Option<Number>;
+pub type SudokuCells = [[SudokuCell; 9]; 9];
+pub const EMPTY_CELLS: SudokuCells = [[None; 9]; 9];
+
 #[derive(Debug, Default, Clone)]
 pub struct SudokuGenerator {
-    pub(crate) cells: [[Option<Number>; 9]; 9], // [rows][cols]
+    pub(crate) cells: SudokuCells, // [rows][cols]
     rows: [BitSet; 9],
     cols: [BitSet; 9],
     boxes: [BitSet; 9],
@@ -67,10 +97,7 @@ impl SudokuGenerator {
         if row_i >= 9 || col_i >= 9 {
             return Err(SudokuError::InvalidCell);
         }
-        if self.rows[row_i].get(n)
-            || self.cols[col_i].get(n)
-            || self.boxes[Self::get_box_i(row_i, col_i)].get(n)
-        {
+        if (self.get_possible_for_cell(row_i, col_i)).get(n) {
             return Err(SudokuError::InvalidValue);
         }
         self.clear_cell(row_i, col_i);
@@ -100,6 +127,10 @@ impl SudokuGenerator {
         self.cells[row_i][col_i]
     }
 
+    pub fn cells_mut(&mut self) -> impl Iterator<Item = (&mut Option<Number>, usize, usize)> {
+        self.cells.iter_cells_mut()
+    }
+
     pub fn has_one_solution(mut self) -> bool {
         let mut empty_indices = Vec::new();
         for index in 0..9 * 9 {
@@ -109,7 +140,7 @@ impl SudokuGenerator {
                 empty_indices.push(index);
             }
         }
-        let options = self.get_options();
+        let options = self.get_possible();
         let mut tried = options;
         let mut index = 0;
         let mut solutions = 0;
@@ -153,19 +184,17 @@ impl SudokuGenerator {
         self.cells.iter().flatten().filter(|c| c.is_some()).count()
     }
 
-    pub fn get_options(&self) -> [[BitSet; 9]; 9] {
-        let mut tried = [[BitSet::new(); 9]; 9];
-        for (row_i, row) in self.cells.iter().enumerate() {
-            for (col_i, cell) in row.iter().enumerate() {
-                if let Some(number) = cell {
-                    for i in 0..9 {
-                        tried[row_i][i].set(*number);
-                        tried[i][col_i].set(*number);
-                        tried[(row_i / 3) * 3 + i / 3][(col_i / 3) * 3 + i % 3];
-                    }
-                }
+    pub fn get_possible_for_cell(&self, row_i: usize, col_i: usize) -> BitSet {
+        self.rows[row_i] | self.cols[col_i] | self.boxes[Self::get_box_i(row_i, col_i)]
+    }
+
+    pub fn get_possible(&self) -> [[BitSet; 9]; 9] {
+        let mut possible = [[BitSet::new(); 9]; 9];
+        for (row_i, row) in possible.iter_mut().enumerate() {
+            for (col_i, cell) in row.iter_mut().enumerate() {
+                *cell = self.get_possible_for_cell(row_i, col_i);
             }
         }
-        tried
+        possible
     }
 }

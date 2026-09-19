@@ -4,7 +4,7 @@
   text(
     font: "Liberation Sans",
     size,
-    weight: 600,
+    weight: 550,
     if n == none {
       " "
     } else {
@@ -17,7 +17,23 @@
 
 #let write_solution_cell(n) = write_cell_size(n, 8pt)
 
-#set page(margin: 6mm)
+#let margin = (top: 24mm, bottom: 6mm, left: 6mm, right: 6mm);
+
+#let header = table(
+  columns: (auto, 1fr, auto),
+  rows: 32pt,
+  align: horizon,
+  text(
+    font: "Liberation Sans",
+    16pt,
+    weight: 600,
+    "Ime:",
+  ),
+  [],
+  datetime.today().display()
+)
+
+#set page(margin: margin, header: header)
 
 #let sudoku_stroke(x, y) = {
   let (t, b, l, r) = (1pt, 1pt, 1pt, 1pt)
@@ -64,7 +80,8 @@
           ..puzzle.flatten().map(write_solution_cell)
         ),
       ),
-    ).map(i => rotate(180deg, i))
+    )
+    .map(i => rotate(180deg, i))
   table(
     stroke: 0pt,
     inset: 6pt,

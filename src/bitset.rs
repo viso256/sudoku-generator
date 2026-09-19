@@ -1,4 +1,7 @@
-use std::fmt::Debug;
+use std::{
+    fmt::Debug,
+    ops::{BitAnd, BitOr},
+};
 
 use rand::seq::IndexedRandom as _;
 
@@ -64,6 +67,16 @@ impl BitSet {
         self.0 &= !n.to_bits();
     }
 
+    pub fn get_count(&self) -> u8 {
+        let mut n = self.0;
+        let mut sum = 0;
+        for _ in 0..9 {
+            sum += n & 0x1;
+            n <<= 0x1;
+        }
+        sum as u8
+    }
+
     pub fn all_seen(&self) -> bool {
         use Number::*;
         self.0
@@ -101,5 +114,21 @@ impl BitSet {
             }
         }
         None
+    }
+}
+
+impl BitAnd for BitSet {
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        Self(self.0 & rhs.0)
+    }
+}
+
+impl BitOr for BitSet {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        Self(self.0 | rhs.0)
     }
 }
