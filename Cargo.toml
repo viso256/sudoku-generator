@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-generate-pdf = ["dep:typst", "dep:typst-pdf", "dep:serde_json", "dep:time"]
+generate-pdf = ["dep:typst", "dep:typst-pdf", "serde_json", "dep:time"]
 
 [dependencies]
 rand = "0.10.1"

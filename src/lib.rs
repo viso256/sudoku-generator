@@ -1,3 +1,6 @@
+#[cfg(feature = "generate-pdf")]
+use time::PlainDateTime;
+
 use crate::{
     bitset::BitSet,
     error::SudokuError,
@@ -72,11 +75,11 @@ pub fn generate_puzzle() -> Puzzle {
 }
 
 #[cfg(feature = "generate-pdf")]
-pub fn generate_pdf(pages: usize) -> Vec<u8> {
+pub fn generate_pdf(pages: usize, datetime: Option<PlainDateTime>) -> Vec<u8> {
     use typst::diag::Warned;
-use typst_pdf::PdfOptions;
+    use typst_pdf::PdfOptions;
 
-use crate::pdf_generator::CustomWorld;
+    use crate::pdf_generator::CustomWorld;
 
     let mut puzzles = Vec::new();
 
@@ -84,9 +87,12 @@ use crate::pdf_generator::CustomWorld;
         puzzles.push(generate_puzzle());
     }
 
-    let world =
+    let mut world =
         CustomWorld::new(serde_json::to_string(&puzzles).expect("should be able to generate json"));
-    let Warned { output, warnings} = typst::compile(&world);
+    if let Some(datetime) = datetime {
+        world.with_datetime(datetime);
+    };
+    let Warned { output, warnings } = typst::compile(&world);
     if !warnings.is_empty() {
         eprintln!("warnings: {:#?}", warnings);
     }

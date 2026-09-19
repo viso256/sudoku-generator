@@ -15,6 +15,7 @@ impl Puzzle {
         Self { puzzle, solution }
     }
 
+    #[cfg(feature = "serde_json")]
     pub fn to_json(&self) -> String {
         serde_json::to_string_pretty(self).expect("failed to generate json")
     }
