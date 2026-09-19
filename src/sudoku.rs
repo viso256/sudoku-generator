@@ -14,6 +14,10 @@ impl Puzzle {
     pub fn new_from(puzzle: Sudoku, solution: Sudoku) -> Self {
         Self { puzzle, solution }
     }
+
+    pub fn to_json(&self) -> String {
+        serde_json::to_string_pretty(self).expect("failed to generate json")
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
