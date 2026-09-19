@@ -29,7 +29,7 @@ fn main() {
 
     #[cfg(feature = "generate-pdf")]
     {
-        let pdf = generate_pdf(2, None);
+        let pdf = generate_pdf(2);
 
         std::fs::write("out.pdf", pdf).unwrap();
     }

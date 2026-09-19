@@ -18,7 +18,6 @@ pub struct CustomWorld {
     json_file: Bytes,
     json_file_id: FileId,
     fonts: [Font; 4],
-    datetime: Option<PlainDateTime>,
 }
 
 impl CustomWorld {
@@ -54,7 +53,6 @@ impl CustomWorld {
             VirtualPath::new("sudoku.json").unwrap(),
         ));
         let json_file = Bytes::new(json);
-        let datetime = None;
         Self {
             library,
             font_book,
@@ -63,15 +61,7 @@ impl CustomWorld {
             json_file,
             json_file_id,
             fonts,
-            datetime,
         }
-    }
-
-    /// Set the current datetime to be used by the document, for platforms that do
-    /// not support OffsetDateTime::now_local()
-    pub fn with_datetime(&mut self, datetime: PlainDateTime) -> &mut Self {
-        self.datetime = Some(datetime);
-        self
     }
 }
 
